@@ -1,0 +1,32 @@
+<br />
+<table border="1"> <!--table为表格，border为边框大小-->
+	<tr><!--tr为行，第一行-->
+	    <!--colspan为合并行单元格， bgcolor为单元格背景颜色，font为字体颜色-->
+		<td colspan="2" bgcolor="DodgerBlue" height="2">
+			<font size="4" color="white">
+			<p align="center">
+			IPU02冒烟自动化测试结果
+		</td>
+	</tr>
+	<tr><!--tr为行，第二行-->
+		<td>项目名称</td><!--td为列，第一列-->
+		<th><p align="left">IPU02</th><!--th为标题栏，第二列， align左对齐-->
+	</tr>
+	<tr>
+		<td>测试时间</td>
+		<th><p align="left">${BUILD_TIMESTAMP}</th>
+	</tr>
+        <tr>
+		<td>软件版本</td>
+		<th><p align="left">${Version}</th>
+	</tr>
+        <tr>
+		<td>构建结果</td>
+		<th><p align="left">Success</th>
+	</tr>
+	<tr>
+		<td>集成测试报告</td>
+		<td><A HREF="${JOB_URL}allure">${JOB_URL}allure</A><br/></td>
+	</tr>
+</table>
+

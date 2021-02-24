@@ -1,0 +1,52 @@
+一、串口命令相关
+1.1、通过设备串口发送命令，并等待关键字出现，serial标志为等待设备串口功能，ls为串口发送的命令，diag_service为等待的关键字，30为超时时间，单位为秒
+java -jar IT6800.jar serial "ls" "diag_service" 30
+
+1.2、通过设备串口执行某个txt文件里面的命令，test.txt为待执行的串口命令序列
+java -Dfile.encoding=utf-8 -jar IT6831.jar test.txt
+
+1.3、通过设备串口等待关键字出现，wait关键字 + 等待的字符串 + 超时时间(设备串口从配置文件获取)
+java -jar IT6800.jar wait "diag_service" 30
+
+
+二、程控电源
+2.1 程控电源单独控制，COM5为成功电源端口，off为关闭程控电源的输出，on为打开程控电源的输出，12.0为设置为设置程控电源电压为12.0V
+java -Dfile.encoding=utf-8 -jar "%~dp0\IT6831.jar" COM5 off
+java -Dfile.encoding=utf-8 -jar "%~dp0\IT6831.jar" COM5 on
+java -Dfile.encoding=utf-8 -jar "%~dp0\IT6831.jar" COM5 12.0
+
+
+三、电源和设备串口搭配使用
+3.1 重启电源并等待设备串口输出某个字符串，COM5为电源端口，wait标志为需要在串口等待字符串，Startup complete为等待的字符串，30为超时时间，单位为秒
+java -jar IT6800.jar COM5 wait "Startup complete" 30
+
+
+四、邮件相关
+从config.properties    ：读取项目信息和邮件信息发送
+scpiUsed=true          ：程控电源是否使用SCPI方式通讯
+deviceSerialCom = COM4 ：设备串口端口
+projectName=IPU02      ：项目名称
+EmailSender=Dongcheng.Wei@desay-svautomotive.com  ：邮件发送者
+EmailTo=Dongcheng.Wei@desay-svautomotive.com      ：邮件接收者，多个用英文逗号隔开
+EmailTitle=IPU02 Auto Smock Test                  ：邮件标题
+
+执行命令：
+发送邮件，未定义报告路径
+java -Dfile.encoding=utf-8 -jar IT6831.jar email
+发送邮件，定义报告路径为reportPath
+java -Dfile.encoding=utf-8 -jar IT6831.jar email "reportPath"
+发送邮件，定义报告路径为reportPath，附件为D:\test.txt和D:\test1.txt，更多的可以在后面添加
+java -Dfile.encoding=utf-8 -jar IT6831.jar email "reportPath" "D:\test.txt" "D:\test1.txt"
+
+五、usb共享器(待完成)
+on为连接到本PC，targetfile为连接后判断该目录或文件存在则说明连接成功
+java -Dfile.encoding=utf-8 -jar IT6831.jar UsbSwitchCopy "targetfile"
+
+off为断开与PC的连接，targetfile为连接后判断该目录或文件不存在则说明断开连接成功
+java -Dfile.encoding=utf-8 -jar IT6831.jar UsbSwitchCopy "targetfile"
+
+
+java -Dfile.encoding=utf-8 -jar IT6831.jar usbswitch on "targetfile"
+java -Dfile.encoding=utf-8 -jar IT6831.jar usbswitch off "targetfile"
+
+
