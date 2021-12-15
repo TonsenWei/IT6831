@@ -38,15 +38,39 @@ java -Dfile.encoding=utf-8 -jar IT6831.jar email "reportPath"
 发送邮件，定义报告路径为reportPath，附件为D:\test.txt和D:\test1.txt，更多的可以在后面添加
 java -Dfile.encoding=utf-8 -jar IT6831.jar email "reportPath" "D:\test.txt" "D:\test1.txt"
 
-五、usb共享器(待完成)
+五、usb共享器
+(2个参数)
 on为连接到本PC，targetfile为连接后判断该目录或文件存在则说明连接成功
 java -Dfile.encoding=utf-8 -jar IT6831.jar UsbSwitchCopy "targetfile"
 
 off为断开与PC的连接，targetfile为连接后判断该目录或文件不存在则说明断开连接成功
 java -Dfile.encoding=utf-8 -jar IT6831.jar UsbSwitchCopy "targetfile"
 
-
+(3个参数)
 java -Dfile.encoding=utf-8 -jar IT6831.jar usbswitch on "targetfile"
 java -Dfile.encoding=utf-8 -jar IT6831.jar usbswitch off "targetfile"
 
+usb序列号获取方式：cmd /c vol D:
+java -Dfile.encoding=utf-8 -jar IT6831.jar usbswitch_sn on "usb_serialnumber"
+java -Dfile.encoding=utf-8 -jar IT6831.jar usbswitch_sn off "usb_serialnumber"
 
+六、提取配置信息(未完成)
+从某个文件提取配置信息到指定文件
+java -Dfile.encoding=utf-8 -jar IT6831.jar get_properties "D:\test.txt" "D:\outprop.properties"
+
+
+拷贝文件到序列号为serial_num的U盘的根目录
+java -Dfile.encoding=utf-8 -jar IT6831.jar filecopy "frompath" "serial_num"
+
+
+删除序列号为serial_num的U盘的文件.frompath为文件路径，如 test.txt为根目录下，scr\test.txt为scr目录下的text.txt
+java -Dfile.encoding=utf-8 -jar IT6831.jar file_delete "frompath" "serial_num"
+
+七、继电器控制
+
+(2个参数,使用配置文件里面的继电器ID和端口
+java -Dfile.encoding=utf-8 -jar IT6831.jar relay "open"   
+java -Dfile.encoding=utf-8 -jar IT6831.jar relay "close"
+
+4个参数，直接传继电器ID和端口
+java -Dfile.encoding=utf-8 -jar IT6831.jar relay "6QMBS" "04" "open"

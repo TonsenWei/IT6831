@@ -62,7 +62,9 @@ public class SerialCommands implements Runnable, SerialPortEventListener {
     private boolean isResultComeout = false;
     private String waitResultString = "TonsenAndroid";
 	private String saveLogPath = WORKSPACE_DIR + "\\串口日志" + appName + ".txt";
-    
+	
+	private long receiveNullTime = System.currentTimeMillis();
+	
 	
 	//控件相关
 	private static String filterKeyworksStr = "";
@@ -362,7 +364,7 @@ public class SerialCommands implements Runnable, SerialPortEventListener {
         case SerialPortEvent.OUTPUT_BUFFER_EMPTY:/*Output buffer is empty，输出缓冲区清空*/
         	System.out.println("SerialComposite.java case SerialPortEvent.OUTPUT_BUFFER_EMPTY:输出缓冲区清空");
             break;  
-        case SerialPortEvent.DATA_AVAILABLE:/*Data available at the serial port，端口有可用数据。读到缓冲数组，输出到终端*/  
+        case SerialPortEvent.DATA_AVAILABLE:/*Data available at the serial port，端口有可用数据。读到缓冲数组，输出到终端*/
             try {  
 				if (serialPort != null) {
 					while(inputStream.available() > 0)
@@ -370,13 +372,14 @@ public class SerialCommands implements Runnable, SerialPortEventListener {
 						String receiveStr = "";
 						try {
 							while ((receiveStr = bufferedReaderReceive.readLine()) != null) {
+								setReceiveNullTime(System.currentTimeMillis());
 								if (receiveStr.contains(waitResultString)) {
 									isResultComeout = true;
 									try {//接收的字符串写入文件
 										receiveLineStr = MyUtils.getNowTimeMills() + "> " + receiveStr + System.lineSeparator();
-										System.out.print(receiveLineStr);
+										System.out.println(receiveStr);
 										needFlushSerialFile = true;
-										traceTempFile.write(receiveLineStr);
+										traceTempFile.append(receiveLineStr);
 										traceTempFile.flush();
 									} catch (Exception e) {
 									}
@@ -384,9 +387,9 @@ public class SerialCommands implements Runnable, SerialPortEventListener {
 								} else if (!receiveStr.equals("")) {
 									try {//接收的字符串写入文件
 										receiveLineStr = MyUtils.getNowTimeMills() + "> " + receiveStr + System.lineSeparator();
-										System.out.print(receiveLineStr);
+										System.out.println(receiveStr);
 										needFlushSerialFile = true;
-										traceTempFile.write(receiveLineStr);
+										traceTempFile.append(receiveLineStr);
 										traceTempFile.flush();
 									} catch (Exception e) {
 									}
@@ -539,4 +542,12 @@ public class SerialCommands implements Runnable, SerialPortEventListener {
 			logFile.delete();
 		}
 	}
+	
+    public long getReceiveNullTime() {
+		return receiveNullTime;
+	}
+	public void setReceiveNullTime(long receiveNullTime) {
+		this.receiveNullTime = receiveNullTime;
+	}
+	
 }

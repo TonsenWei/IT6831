@@ -25,15 +25,22 @@ import gnu.io.UnsupportedCommOperationException;
 /**
  * 用于自动化控制的脚本
  * @author uidq0460
+ * 
+ * 2021-07-09 增加继电器序列号必须在配置文件中配置
+ * 2021-12-14 增加继电器端口号必须在配置文件中配置
+ * 2021-12-15 单独继电器和U盘切换都涉及到操作继电器，修复U盘切换控制继电器没有从配置文件获取继电器端口的问题。
+ *            增加继电器单独控制
  *
  */
 public class IT6831Ctrl {
+	private static final String VERSION_INFO = "IT6831_Update:2021-12-15_03";
 	public static final String LESS_CURRENT = "less";
 	public static final String MORE_CURRENT = "more";
 	
 	//工作目录
 	public static final String WORKSPACE_DIR = System.getProperty("user.dir");                //工作空间目录
 	public static final String DEFAULT_RELAY_EXE_PATH = "\"" + WORKSPACE_DIR + "/USBRelay/DefaultUSBRelay.exe\"";
+	public static final String SELECT_RELAY_EXE_PATH = "\"" + WORKSPACE_DIR + "/USBRelay/CommandApp_USBRelay.exe\"";
 	
 	//配置信息
 	public static final String SETTING_PROP_FILE_PATH = WORKSPACE_DIR + "\\config.properties";//配置文件
@@ -61,6 +68,12 @@ public class IT6831Ctrl {
 	public static String cksFileName = "DNL-5_firmware_usb.cks";
 	public static String usbUpdateFileName = "DNL-5_firmware_usb.tar.gz";
 	
+
+	public static String usbRelayId = "";  // 继电器ID
+	public static String usbRelayCom = "";  // 继电器ID
+	public static String usbSerialNumber = "AABD-34FD";  // U盘序列号
+	public static String projectPowerCom = "COM5";       // 电源端口号
+	
 	public static boolean isScpi = false; //是否是SCPI指令
 	
 	// 网络adb连接相关
@@ -79,6 +92,7 @@ public class IT6831Ctrl {
 	private static boolean uiautomatorCanNotConnect = false;
 
 	public static void main(String[] args) {
+		MyUtils.printWithTimeMill(VERSION_INFO);
 		String scpiUsed = PropUtil.getValueOfProp("scpiUsed", SETTING_PROP_FILE_PATH);
 		if (scpiUsed != null && !scpiUsed.equals("")) {//正常读取到数据，则判断值
 			//是否使用SCPI
@@ -92,9 +106,34 @@ public class IT6831Ctrl {
 			scpiUsed = "true";
 			isScpi = true;
 		}
+		MyUtils.printWithTimeMill("isScpi = " + isScpi);
 		projectName = PropUtil.getValueOfProp("projectName", SETTING_PROP_FILE_PATH);
 		if (projectName == null || projectName.equals("")) {
-			projectName = "please set in config.properties,exam:projectName=IPU02";
+			projectName = "please set in config.properties,exam: projectName=IPU02";
+		}
+		usbRelayId = PropUtil.getValueOfProp("usbRelayId", SETTING_PROP_FILE_PATH);
+		if (usbRelayId == null || usbRelayId.equals("")) {
+			MyUtils.printWithTimeMill("please set usbRelayId in config.properties, exam: usbRelayId=3DOV2");
+		} else {
+			MyUtils.printWithTimeMill("usbRelayId = " + usbRelayId);
+		}
+		usbRelayCom = PropUtil.getValueOfProp("usbRelayCom", SETTING_PROP_FILE_PATH);
+		if (usbRelayCom == null || usbRelayCom.equals("")) {
+			MyUtils.printWithTimeMill("please set usbRelayId in config.properties, exam: usbRelayCom=01");
+		} else {
+			MyUtils.printWithTimeMill("usbRelayCom = " + usbRelayCom);
+		}
+		usbSerialNumber = PropUtil.getValueOfProp("usbSerialNumber", SETTING_PROP_FILE_PATH);
+		if (usbSerialNumber == null || usbSerialNumber.equals("")) {
+			usbSerialNumber = "please set in config.properties,exam: usbSerialNumber=AABD-34FD";
+		} else {
+			MyUtils.printWithTimeMill("usbSerialNumber = " + usbSerialNumber);
+		}
+		projectPowerCom = PropUtil.getValueOfProp("projectPowerCom", SETTING_PROP_FILE_PATH);
+		if (projectPowerCom == null || projectPowerCom.equals("")) {
+			projectPowerCom = "please set in config.properties,exam: projectPowerCom=COM5";
+		} else {
+			MyUtils.printWithTimeMill("projectPowerCom = " + projectPowerCom);
 		}
 		emailTitleSave = PropUtil.getValueOfProp("EmailTitle", SETTING_PROP_FILE_PATH);
 		if (emailTitleSave == null || emailTitleSave.equals("")) {
@@ -108,7 +147,6 @@ public class IT6831Ctrl {
 		if (usbUpdateFileName == null || usbUpdateFileName.equals("")) {
 			usbUpdateFileName = "DNL-5_firmware_usb.tar.gz";
 		}
-		MyUtils.printWithTimeMill("isScpi = " + isScpi);
 //		String[] args = {"COM5", "more", "1200", "1"};
 
 		//连接的ip和端口， 重连时间间隔，等待连接成功的超时时间
@@ -130,6 +168,8 @@ public class IT6831Ctrl {
 				sendReportEmail(getEmailContent(args[1]));		
 			} else if (args[0] != null && args[0].equalsIgnoreCase("UsbSwitchCopy")) {
 				switchUSBAndCopyFile(args[1]);//目录
+			} else if (args[0] != null && args[0].equalsIgnoreCase("relay")) {
+				relayAction(usbRelayId, usbRelayCom, args[1]);
 			} else {
 				powerOutput(args[0], args[1]);
 			}
@@ -146,7 +186,9 @@ public class IT6831Ctrl {
 			} else if (args[0].equalsIgnoreCase("serial") ) {
 				int exitCode = sendSerialCmdAndWaitString(args[1], args[2], args[3]);//// java -jar IT6800.jar serial "ls" "diag_service" 30
 				System.exit(exitCode);
-			}else {
+			} else if (args[0] != null && args[0].equalsIgnoreCase("relay")) {//relayAction
+				relayAction(args[1], args[2], args[3]);
+			} else {
 				powerCheckValue(args);
 			}
 		} else if (args.length == 3) {//String[] args = {"192.168.0.2:5555", "3", "120"};//连接的ip和端口， 重连时间间隔，等待连接成功的超时时间
@@ -168,7 +210,47 @@ public class IT6831Ctrl {
 			} else if (args[0] != null && args[0].equalsIgnoreCase("wait")) {
 				int exitCode = sendSerialCmdAndWaitString(args[1], args[2]);// java -jar IT6800.jar wait "ls"  30
 				System.exit(exitCode);
-			} else {
+			} else if (args[0] != null && args[0].equalsIgnoreCase("usbswitch_sn")) {
+				boolean isOk;
+				try {
+					isOk = switchUSBBySnKey(args[1], args[2]);
+					if (isOk == false) {
+						System.exit(-1);
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			} else if (args[0] != null && args[0].equalsIgnoreCase("usbswitch_sn_copy")) {//switchUSBBySnKeyAndCopyFiles
+				boolean isOk;
+				try {
+					isOk = switchUSBBySnKeyAndCopyFiles(args[1], args[2]);
+					if (isOk == false) {
+						System.exit(-1);
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			} else if (args[0] != null && args[0].equalsIgnoreCase("filecopy")) {//filecopy, deleteFile
+				boolean isOk;
+				try {
+					isOk = copyFile(args[1], args[2]);
+					if (isOk == false) {
+						System.exit(-1);
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			} else if (args[0] != null && args[0].equalsIgnoreCase("file_delete")) {//filecopy, deleteFile
+				boolean isOk;
+				try {
+					isOk = deleteFile(args[1], args[2]);
+					if (isOk == false) {
+						System.exit(-1);
+					}
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}else {
 				connectNetAdb(args[0], args[1], args[2]);
 			}
 		} else {
@@ -186,6 +268,7 @@ public class IT6831Ctrl {
 			}
 		}
 	}
+
 	
 	public static void copyUpdateFile(String toFile) throws IOException {
 		String cksFromFilePath = WORKSPACE_DIR + "\\" + cksFileName;
@@ -193,9 +276,92 @@ public class IT6831Ctrl {
 		
 		String cksToFilePath = toFile + "\\" + cksFileName;
 		String usbUpdateToFilePath = toFile + "\\" + usbUpdateFileName;
-		
+		MyUtils.printWithTimeMill("Starting copy " + cksFromFilePath + " to " + usbUpdateToFilePath + " ...");
 		MyUtils.fileCopyByFileChannel(usbUpdateFromFilePath, usbUpdateToFilePath);
+		MyUtils.printWithTimeMill("Starting copy " + cksFromFilePath + " to " + cksToFilePath + "...");
 		MyUtils.fileCopyByFileChannel(cksFromFilePath, cksToFilePath);
+	}
+	
+	public static boolean copyFile(String fromFile, String snKeyStr) throws Exception {
+		boolean isOk = false;
+		File file = new File(fromFile);
+		String fileNameStr = file.getName();
+		String usbPathStr = MyUtils.getUSBPathBySerialKey(snKeyStr);
+		if (usbPathStr != null) {
+			File delFile = new File(usbPathStr + fileNameStr);
+			if (delFile.exists()) {
+				MyUtils.printWithTimeMill("Delete exists file ...");
+				delFile.delete();
+			} else {
+				MyUtils.printWithTimeMill("File not exists, start copy new ...");
+			}
+			
+			MyUtils.printWithTimeMill("Starting copy " + fromFile + " to " + usbPathStr + fileNameStr + " ...");
+			MyUtils.fileCopyByFileChannel(fromFile,  usbPathStr + fileNameStr);
+			isOk = true;
+		}
+		return isOk;
+	}
+	
+	/**
+	 * 删除文件
+	 * @param delFilePath 文件路径，不包括驱动器符号（如 E:\）
+	 * @param snKeyStr
+	 * @return
+	 * @throws Exception
+	 */
+	public static boolean deleteFile(String delFilePath, String snKeyStr) throws Exception {
+		boolean isOk = false;
+		String usbPathStr = MyUtils.getUSBPathBySerialKey(snKeyStr);
+		if (usbPathStr != null) {
+			File delFile = new File(usbPathStr + delFilePath);
+			if (delFile.exists()) {
+				MyUtils.printWithTimeMill("deleteFile: " + usbPathStr + delFilePath);
+				delFile.delete();
+			} else {
+				MyUtils.printWithTimeMill("File not exists, don't need to del ...");
+			}
+			isOk = true;
+		}
+		return isOk;
+	}
+	
+	/**
+	 * 继电器控制
+	 * 
+	 * @param relayId 继电器id
+	 * @param relayCom 继电器端口
+	 * @param openOrClose 继电器闭合还是断开
+	 * @return
+	 */
+	public static boolean relayAction(String relayId, String relayCom, String openOrClose) {
+		boolean isOk = false;
+		String pressRelay = SELECT_RELAY_EXE_PATH + " " + relayId + " open " + relayCom;
+		String releaseRelay = SELECT_RELAY_EXE_PATH + " " + relayId + " close " + relayCom;
+		if (openOrClose.equalsIgnoreCase("open")) {
+			MyUtils.printWithTimeMill("relayAction: " + pressRelay);
+			boolean exeRelayReault = MyUtils.excuteWinCmd(pressRelay);
+			if (exeRelayReault == false) {
+				try {
+					throw new Exception("relay excute fail!");
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+			isOk = true;
+		} else if (openOrClose.equalsIgnoreCase("close")) {
+			MyUtils.printWithTimeMill("relayAction: " + releaseRelay);
+			boolean exeRelayReault = MyUtils.excuteWinCmd(releaseRelay);
+			if (exeRelayReault == false) {
+				try {
+					throw new Exception("relay excute fail!");
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+			isOk = true;
+		}
+		return isOk;
 	}
 	
 	/**
@@ -205,9 +371,16 @@ public class IT6831Ctrl {
 	 * */
 	public static boolean switchUSB(String onOff, String fileDirPath) {
 		boolean isOk = false;
-
-		String pressRelay = DEFAULT_RELAY_EXE_PATH + " open 01";
-		String releaseRelay = DEFAULT_RELAY_EXE_PATH + " close 01";
+		if (usbRelayId == null || usbRelayId.trim().equals("")) {
+			return false;
+		}
+		if (usbRelayCom == null || usbRelayCom.trim().equals("")) {
+			return false;
+		}
+//		String pressRelay = DEFAULT_RELAY_EXE_PATH + " open 01";
+//		String releaseRelay = DEFAULT_RELAY_EXE_PATH + " close 01";
+		String pressRelay = SELECT_RELAY_EXE_PATH + " " + usbRelayId + " open " + usbRelayCom;
+		String releaseRelay = SELECT_RELAY_EXE_PATH + " " + usbRelayId + " close " + usbRelayCom;
 		try {
 			File file = new File(fileDirPath);
 			if (onOff.equalsIgnoreCase("on")) {
@@ -221,7 +394,6 @@ public class IT6831Ctrl {
 						try {
 							throw new Exception("relay excute fail!");
 						} catch (Exception e) {
-							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
 					}
@@ -231,7 +403,6 @@ public class IT6831Ctrl {
 						try {
 							throw new Exception("relay excute fail!");
 						} catch (Exception e) {
-							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
 					}
@@ -267,7 +438,6 @@ public class IT6831Ctrl {
 						try {
 							throw new Exception("relay excute fail!");
 						} catch (Exception e) {
-							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
 					}
@@ -277,7 +447,6 @@ public class IT6831Ctrl {
 						try {
 							throw new Exception("relay excute fail!");
 						} catch (Exception e) {
-							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
 					}
@@ -305,19 +474,276 @@ public class IT6831Ctrl {
 				}
 			} else {
 				try {
-					throw new Exception("input error: " + onOff);
+					throw new Exception("it6831_error: input error, " + onOff);
 				} catch (Exception e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
 			}
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 
 		if (isOk == false) {
-			System.out.println("error: switch USB fail");
+			System.out.println("it6831_error: switch USB fail");
+		}
+		return isOk;
+	}
+	
+	/**
+	 * releaseRelay = ToolsView.DEFAULT_RELAY_EXE_PATH + " close " + relaySelectStr;
+	 * pressRelay = ToolsView.DEFAULT_RELAY_EXE_PATH + " open " + relaySelectStr;
+	 * @throws Exception 
+	 * */
+	public static boolean switchUSBBySnKey(String onOff, String snKeyStr) throws Exception {
+		boolean isOk = false;
+		if (usbRelayId == null || usbRelayId.trim().equals("")) {
+			return false;
+		}
+		if (usbRelayCom == null || usbRelayCom.trim().equals("")) {
+			return false;
+		}
+		
+		String pressRelay = SELECT_RELAY_EXE_PATH + " " + usbRelayId + " open " + usbRelayCom;
+		String releaseRelay = SELECT_RELAY_EXE_PATH + " " + usbRelayId + " close " + usbRelayCom;
+		try {
+			String usbPathStr = MyUtils.getUSBPathBySerialKey(snKeyStr);
+			if (onOff.equalsIgnoreCase("on")) {
+				if (usbPathStr != null) {  // 本身已经是on，U盘已连接
+					MyUtils.printWithTimeMill("USB have connected to PC");
+					isOk = true;
+				} else {  // 本身是off, 切换继电器,并检测usb连接上
+					MyUtils.printWithTimeMill("USB is not connected,connecting...");
+					boolean exeRelayReault = MyUtils.excuteWinCmd(pressRelay);
+					if (exeRelayReault == false) {
+						try {
+							throw new Exception("relay excute fail!");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+					Thread.sleep(100);
+					exeRelayReault = MyUtils.excuteWinCmd(releaseRelay);
+					if (exeRelayReault == false) {
+						try {
+							throw new Exception("relay excute fail!");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+					//wait String
+					Thread.sleep(5000);
+					MyUtils.printWithTimeMill("Waitting USB connect to PC...");
+					boolean keepWait = true;
+					long startWaitTime = System.currentTimeMillis();  	
+					long currentMills = 0;
+					while (keepWait == true && currentMills <= timeoutL) {
+						currentMills = System.currentTimeMillis() - startWaitTime;
+						usbPathStr = MyUtils.getUSBPathBySerialKey(snKeyStr);
+						if (usbPathStr != null) {
+							keepWait = false;
+							currentMills = timeoutL + 1;
+							isOk = true;
+						} else {
+							try {
+								Thread.sleep(1000);
+							} catch (InterruptedException e) {
+								e.printStackTrace();
+							}
+						}
+					}
+				}
+			} else if (onOff.equalsIgnoreCase("off")) {
+				if (usbPathStr == null) {  // 本身已经是off，U盘已连接
+					MyUtils.printWithTimeMill("USB was disconnected from PC");
+					isOk = true;
+				} else {  // 本身是on, 切换继电器,并检测usb断开
+					MyUtils.printWithTimeMill("USB was connected to PC");
+					boolean exeRelayReault = MyUtils.excuteWinCmd(pressRelay);
+					if (exeRelayReault == false) {
+						try {
+							throw new Exception("relay excute fail!");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+					Thread.sleep(100);
+					exeRelayReault = MyUtils.excuteWinCmd(releaseRelay);
+					if (exeRelayReault == false) {
+						try {
+							throw new Exception("relay excute fail!");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+					//wait String
+					Thread.sleep(5000);
+					MyUtils.printWithTimeMill("Waitting USB disconnect from PC...");
+					boolean keepWait = true;
+					long startWaitTime = System.currentTimeMillis();  	
+					long currentMills = 0;
+					while (keepWait == true && currentMills <= timeoutL) {
+						currentMills = System.currentTimeMillis() - startWaitTime;
+						usbPathStr = MyUtils.getUSBPathBySerialKey(snKeyStr);
+						if (usbPathStr != null) {
+							try {
+								Thread.sleep(500);
+							} catch (InterruptedException e) {
+								e.printStackTrace();
+							}
+						} else {
+							keepWait = false;
+							currentMills = timeoutL + 1;
+							isOk = true;
+							
+						}
+					}
+				}
+			} else {
+				try {
+					throw new Exception("it6831_error: input error, " + onOff);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		
+		if (isOk == false) {
+			System.out.println("it6831_error: switch USB fail");
+		}
+		return isOk;
+	}
+	/**
+	 * releaseRelay = ToolsView.DEFAULT_RELAY_EXE_PATH + " close " + relaySelectStr;
+	 * pressRelay = ToolsView.DEFAULT_RELAY_EXE_PATH + " open " + relaySelectStr;
+	 * @throws Exception 
+	 * */
+	public static boolean switchUSBBySnKeyAndCopyFiles(String onOff, String snKeyStr) throws Exception {
+		boolean isOk = false;
+		if (usbRelayId == null || usbRelayId.trim().equals("")) {
+			return false;
+		}
+		if (usbRelayCom == null || usbRelayCom.trim().equals("")) {
+			return false;
+		}
+		
+		String pressRelay = SELECT_RELAY_EXE_PATH + " " + usbRelayId + " open " + usbRelayCom;
+		String releaseRelay = SELECT_RELAY_EXE_PATH + " " + usbRelayId + " close " + usbRelayCom;
+		
+//		String pressRelay = DEFAULT_RELAY_EXE_PATH + " open 01";
+//		String releaseRelay = DEFAULT_RELAY_EXE_PATH + " close 01";
+		try {
+			String usbPathStr = MyUtils.getUSBPathBySerialKey(snKeyStr);
+			if (onOff.equalsIgnoreCase("on")) {
+				if (usbPathStr != null) {  // 本身已经是on，U盘已连接
+					MyUtils.printWithTimeMill("USB have connected to PC");
+					isOk = true;
+				} else {  // 本身是off, 切换继电器,并检测usb连接上
+					MyUtils.printWithTimeMill("USB is not connected,connecting...");
+					boolean exeRelayReault = MyUtils.excuteWinCmd(pressRelay);
+					if (exeRelayReault == false) {
+						try {
+							throw new Exception("relay excute fail!");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+					Thread.sleep(100);
+					exeRelayReault = MyUtils.excuteWinCmd(releaseRelay);
+					if (exeRelayReault == false) {
+						try {
+							throw new Exception("relay excute fail!");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+					//wait String
+					Thread.sleep(5000);
+					MyUtils.printWithTimeMill("Waitting USB connect to PC...");
+					boolean keepWait = true;
+					long startWaitTime = System.currentTimeMillis();  	
+					long currentMills = 0;
+					while (keepWait == true && currentMills <= timeoutL) {
+						currentMills = System.currentTimeMillis() - startWaitTime;
+						usbPathStr = MyUtils.getUSBPathBySerialKey(snKeyStr);
+						if (usbPathStr != null) {
+							keepWait = false;
+							currentMills = timeoutL + 1;
+							isOk = true;
+						} else {
+							try {
+								Thread.sleep(1000);
+							} catch (InterruptedException e) {
+								e.printStackTrace();
+							}
+						}
+					}
+				}
+				try {
+					copyUpdateFile(usbPathStr);
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			} else if (onOff.equalsIgnoreCase("off")) {
+				if (usbPathStr == null) {  // 本身已经是off，U盘已连接
+					MyUtils.printWithTimeMill("USB was disconnected from PC");
+					isOk = true;
+				} else {  // 本身是on, 切换继电器,并检测usb断开
+					MyUtils.printWithTimeMill("USB was connected to PC");
+					boolean exeRelayReault = MyUtils.excuteWinCmd(pressRelay);
+					if (exeRelayReault == false) {
+						try {
+							throw new Exception("relay excute fail!");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+					Thread.sleep(100);
+					exeRelayReault = MyUtils.excuteWinCmd(releaseRelay);
+					if (exeRelayReault == false) {
+						try {
+							throw new Exception("relay excute fail!");
+						} catch (Exception e) {
+							e.printStackTrace();
+						}
+					}
+					//wait String
+					Thread.sleep(5000);
+					MyUtils.printWithTimeMill("Waitting USB disconnect from PC...");
+					boolean keepWait = true;
+					long startWaitTime = System.currentTimeMillis();  	
+					long currentMills = 0;
+					while (keepWait == true && currentMills <= timeoutL) {
+						currentMills = System.currentTimeMillis() - startWaitTime;
+						usbPathStr = MyUtils.getUSBPathBySerialKey(snKeyStr);
+						if (usbPathStr != null) {
+							try {
+								Thread.sleep(500);
+							} catch (InterruptedException e) {
+								e.printStackTrace();
+							}
+						} else {
+							keepWait = false;
+							currentMills = timeoutL + 1;
+							isOk = true;
+							
+						}
+					}
+				}
+			} else {
+				try {
+					throw new Exception("it6831_error: input error, " + onOff);
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		
+		if (isOk == false) {
+			System.out.println("it6831_error: switch USB fail");
 		}
 		return isOk;
 	}
@@ -329,22 +755,30 @@ public class IT6831Ctrl {
 	 * */
 	public static boolean switchUSBAndCopyFile(String fileDirPath) {
 		boolean isOk = false;
+		if (usbRelayId == null || usbRelayId.trim().equals("")) {
+			return false;
+		}
+		if (usbRelayCom == null || usbRelayCom.trim().equals("")) {
+			return false;
+		}
+		
+		String pressRelay = SELECT_RELAY_EXE_PATH + " " + usbRelayId + " open " + usbRelayCom;
+		String releaseRelay = SELECT_RELAY_EXE_PATH + " " + usbRelayId + " close " + usbRelayCom;
 
-		String pressRelay = DEFAULT_RELAY_EXE_PATH + " open 01";
-		String releaseRelay = DEFAULT_RELAY_EXE_PATH + " close 01";
+//		String pressRelay = DEFAULT_RELAY_EXE_PATH + " open 01";
+//		String releaseRelay = DEFAULT_RELAY_EXE_PATH + " close 01";
 		try {
 			File file = new File(fileDirPath);
 			if (file.exists()) {  // 本身已经是on，U盘已连接
-				MyUtils.printWithTimeMill("USB have connected to PC");
+				MyUtils.printWithTimeMill("USB was connected to PC");
 				isOk = true;
 			} else {  // 本身是off, 切换继电器,并检测usb连接上
-				MyUtils.printWithTimeMill("USB have connected to PC");
+				MyUtils.printWithTimeMill("USB was not connected to PC");
 				boolean exeRelayReault = MyUtils.excuteWinCmd(pressRelay);
 				if (exeRelayReault == false) {
 					try {
 						throw new Exception("relay excute fail!");
 					} catch (Exception e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 				}
@@ -354,7 +788,6 @@ public class IT6831Ctrl {
 					try {
 						throw new Exception("relay excute fail!");
 					} catch (Exception e) {
-						// TODO Auto-generated catch block
 						e.printStackTrace();
 					}
 				}
@@ -383,7 +816,6 @@ public class IT6831Ctrl {
 			try {
 				copyUpdateFile(fileDirPath);
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 			Thread.sleep(3000);
@@ -412,12 +844,11 @@ public class IT6831Ctrl {
 			}
 
 			if (isOk == false) {
-				System.out.println("error: switch fail, target file not exists!");
+				System.out.println("it6831_error: switch fail, target file not exists!");
 			} else {
 				MyUtils.printWithTimeMill("USB have switch to qnx...");
 			}
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return isOk;
@@ -454,6 +885,9 @@ public class IT6831Ctrl {
 				boolean keepWait = true;
 				long startWaitTime = System.currentTimeMillis();  	//用于计时每分钟输出一次提示
 				long currentMills = 0;
+				long currentReceiveNullTimeMills = 0;
+				int powerOnOffCounter = 0;
+				
 				while (keepWait == true && currentMills <= timeoutL) {
 					currentMills = System.currentTimeMillis() - startWaitTime;
 					if (serialCommands.getIsResultComeout() == true) {
@@ -466,19 +900,40 @@ public class IT6831Ctrl {
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						}
+						currentReceiveNullTimeMills = System.currentTimeMillis() - serialCommands.getReceiveNullTime();
+						if (currentReceiveNullTimeMills > (180 * 1000) && powerOnOffCounter < 3) {//一分钟串口没有接收到任何字符串则退出
+							
+							System.out.println("Receive no string in 1 min, exit");
+							serialCommands.setReceiveNullTime(System.currentTimeMillis());
+//							isOk = -1;
+//							keepWait = false;
+//							currentMills = timeoutL + 1;
+							//TODO:
+							try {
+								switchUSBBySnKey("on", usbSerialNumber);
+								powerOutput(projectPowerCom, "off");
+								Thread.sleep(2000);
+								powerOutput(projectPowerCom, "on");
+								switchUSBBySnKey("off", usbSerialNumber);
+								powerOnOffCounter ++;
+								System.out.println("powerOnOffCounter = " + powerOnOffCounter);
+							} catch (Exception e) {
+								e.printStackTrace();
+							}
+						}
 					}
 				}
 				if (isOk != 0) {
-					System.out.println("error: wait string timeout");
+					System.out.println("it6831_error: wait string timeout");
 				}
 			} catch (PortInUseException | UnsupportedCommOperationException e1) {
-				System.out.println("error: " + e1.toString());
+				System.out.println("it6831_error: " + e1.toString());
 				e1.printStackTrace();
 			} finally {
 				SerialCommands.closeSerial();
 			}
 		} else {//第一次打开程序或者读取异常
-			System.out.println("error: deviceSerialCom is null");
+			System.out.println("it6831_error: deviceSerialCom is null");
 			isOk = -1;
 		}
 		
@@ -513,7 +968,6 @@ public class IT6831Ctrl {
 				try {
 					Thread.sleep(500);
 				} catch (InterruptedException e1) {
-					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
 				serialCommands.setIsResultComeout(false);
@@ -539,16 +993,16 @@ public class IT6831Ctrl {
 					}
 				}
 				if (isOk != 0) {
-					System.out.println("error: wait string timeout");
+					System.out.println("it6831_error: wait string timeout");
 				}
 			} catch (PortInUseException | UnsupportedCommOperationException e1) {
-				System.out.println("error: " + e1.toString());
+				System.out.println("it6831_error: " + e1.toString());
 				e1.printStackTrace();
 			} finally {
 				SerialCommands.closeSerial();
 			}
 		} else {//第一次打开程序或者读取异常
-			System.out.println("error: deviceSerialCom is null");
+			System.out.println("it6831_error: deviceSerialCom is null");
 			isOk = -1;
 		}
 		
@@ -603,16 +1057,16 @@ public class IT6831Ctrl {
 					}
 				}
 				if (isOk != 0) {
-					System.out.println("error: wait string timeout");
+					System.out.println("it6831_error: wait string timeout");
 				}
 			} catch (PortInUseException | UnsupportedCommOperationException e1) {
-				System.out.println("error: " + e1.toString());
+				System.out.println("it6831_error: " + e1.toString());
 				e1.printStackTrace();
 			} finally {
 				SerialCommands.closeSerial();
 			}
 		} else {//第一次打开程序或者读取异常
-			System.out.println("error: deviceSerialCom is null");
+			System.out.println("it6831_error: deviceSerialCom is null");
 			isOk = -1;
 		}
 		

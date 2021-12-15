@@ -26,7 +26,58 @@ import java.util.Date;
  */
 public class MyUtils {
 	
+	public static void main(String[] args) {
+		try {
+			//09C1-B27D
+//			MyUtils.printWithTimeMill("result = " + getUSBSerialKey(new Character('D')));
+			MyUtils.printWithTimeMill("result = " + getUSBPathBySerialKey("09C1-B27D444"));
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+	
+	public static String getUSBPathBySerialKey(String snKeyStr) throws Exception {
+		String usbPath = null;
+		File[] roots=File.listRoots();  
+		String tmpPath = null;
+        for (File file : roots) {
+        	tmpPath = file.getPath();
+        	MyUtils.printWithTimeMill(tmpPath);
+        	String tmpDiskStr = file.getPath().replace("\\", "");
+        	if (snKeyStr.equals(getUSBSerialKey(tmpDiskStr))) {
+				MyUtils.printWithTimeMill("Target found, Disk=" + tmpDiskStr + ", sn=" + snKeyStr + ", path=" + tmpPath);
+				usbPath = tmpPath;
+				break;
+			}
+        } 
+        
+        return usbPath;
+	}
 
+	/**
+	 * 获取usb序列号
+	 * @param letter
+	 * @return
+	 * @throws Exception
+	 */
+	public static String getUSBSerialKey(String target) throws Exception{
+        String line = null;
+        String serial = null;
+        Process process = Runtime.getRuntime().exec("cmd /c vol " + target);
+        BufferedReader in = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), "GBK") );
+        while ((line = in.readLine()) != null) {
+        	MyUtils.printWithTimeMill(line);
+            if(line.toLowerCase().contains("卷的序列号是") || line.toLowerCase().contains("serial number")) {
+                String[] strings = line.split(" ");
+                serial = strings[strings.length-1];
+            }
+        }
+        in.close();
+        return serial;
+    }
+	
 	public static void printWithTimeMill(String message) {
 		System.out.println(getNowTimeMills() + "> " + message.replaceAll("\r\n", "\r\n" + getNowTimeMills() + "> "));
 	}
