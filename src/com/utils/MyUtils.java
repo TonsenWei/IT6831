@@ -14,6 +14,7 @@ import java.io.InputStreamReader;
 import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Iterator;
 
 /** 
 * @author 作者 E-mail: Dongcheng.Wei@desay-svautomotive.com
@@ -30,7 +31,11 @@ public class MyUtils {
 		try {
 			//09C1-B27D
 //			MyUtils.printWithTimeMill("result = " + getUSBSerialKey(new Character('D')));
-			MyUtils.printWithTimeMill("result = " + getUSBPathBySerialKey("09C1-B27D444"));
+//			MyUtils.printWithTimeMill("result = " + getUSBPathBySerialKey("09C1-B27D444"));
+			File[] roots = File.listRoots();  // 列出所有盘
+			for (File file : roots) {
+				System.err.println(file.getPath());
+			}
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -39,12 +44,15 @@ public class MyUtils {
 	
 	public static String getUSBPathBySerialKey(String snKeyStr) throws Exception {
 		String usbPath = null;
-		File[] roots=File.listRoots();  
+		/* File.listRoots()返回盘符路径字符串数组
+		 * 	C:\，D:\，E:\，F:\，H:\，I:\，J:\，K:\，M:\，N:\，O:\，P:\，W:\，Y:\，Z:\
+		 */
+		File[] roots = File.listRoots();  // 列出所有盘
 		String tmpPath = null;
-        for (File file : roots) {
+        for (File file : roots) {  //
         	tmpPath = file.getPath();
         	MyUtils.printWithTimeMill(tmpPath);
-        	String tmpDiskStr = file.getPath().replace("\\", "");
+        	String tmpDiskStr = file.getPath().replace("\\", "");  // 把代表路径的“\”去掉，仅剩下盘符如 "F:"
         	if (snKeyStr.equals(getUSBSerialKey(tmpDiskStr))) {
 				MyUtils.printWithTimeMill("Target found, Disk=" + tmpDiskStr + ", sn=" + snKeyStr + ", path=" + tmpPath);
 				usbPath = tmpPath;
@@ -57,8 +65,8 @@ public class MyUtils {
 
 	/**
 	 * 获取usb序列号
-	 * @param letter
-	 * @return
+	 * @param 盘符，如  F:  D:  等
+	 * @return 返回该盘符对应的序列号
 	 * @throws Exception
 	 */
 	public static String getUSBSerialKey(String target) throws Exception{
